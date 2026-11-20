@@ -86,7 +86,7 @@ private val Lila = Color(0xFF6F62C7)
 private val LilaClaro = Color(0xFFA99BF2)
 
 // ═════════════════════════════════════════════
-// 2. DATOS DE PRUEBA
+// 2. DATES DE PRUE
 // ═════════════════════════════════════════════
 data class RitmoCardiaco(val bpm: Int, val tendencia: List<Int>, val haceMinutos: Int, val estado: String)
 data class Oxigeno(val porcentaje: Int, val haceMinutos: Int)
@@ -277,39 +277,81 @@ fun PantallaSueno(datos: Sueno) {
 // ── Pantalla 4: Próxima toma ────────────────
 @Composable
 fun PantallaProximaToma(toma: Toma) {
-    // "Memoria" de la pantalla: ¿ya la marcó como tomada?
-    var tomada by remember { mutableStateOf(false) }
+    // "Memoria" de la pantalla
+    var tomada by remember { mutableStateOf(false) }          // ¿ya la marcó como tomada?
+    var posposiciones by remember { mutableStateOf(0) }       // ¿cuántas veces tocó "10 min"?
+    val horaAviso = sumarMinutos(toma.hora, posposiciones * 10)
 
     PantallaBase {
-        Box(
-            modifier = Modifier.size(34.dp).background(Menta, RoundedCornerShape(10.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            BasicText("💊", style = TextStyle(fontSize = 16.sp))
+        // El icono solo se muestra al inicio (en el reloj el espacio es poco)
+        if (!tomada && posposiciones == 0) {
+            Box(
+                modifier = Modifier.size(34.dp).background(Menta, RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                BasicText("💊", style = TextStyle(fontSize = 16.sp))
+            }
         }
-        BasicText("PRÓXIMA TOMA · ${toma.hora}", style = TextStyle(color = Gris, fontSize = 10.sp, fontWeight = FontWeight.SemiBold))
+
+        BasicText(
+            if (posposiciones > 0 && !tomada) "POSPUESTA · ${posposiciones}x" else "PRÓXIMA TOMA · ${toma.hora}",
+            style = TextStyle(color = Gris, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+        )
         BasicText(toma.medicamento, style = TextStyle(color = Blanco, fontSize = 22.sp, fontWeight = FontWeight.Bold))
         BasicText(toma.dosis, style = TextStyle(color = Menta, fontSize = 12.sp))
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        if (tomada) {
-            Chip(texto = "✓ Registrada", fondo = VerdeChip, colorTexto = VerdeChipTexto)
-            BasicText(
-                "Deshacer",
-                modifier = Modifier.clickable { tomada = false }.padding(6.dp),
-                style = TextStyle(color = Gris, fontSize = 11.sp)
-            )
-        } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                BotonRelleno(texto = "✓ Tomada", alTocar = { tomada = true })
-                BotonContorno(texto = "10 min", alTocar = { /* Más adelante: reprogramar el aviso */ })
+        when {
+            // 1) Ya la tomó
+            tomada -> {
+                Chip(texto = "✓ Registrada", fondo = VerdeChip, colorTexto = VerdeChipTexto)
+                BasicText(
+                    "Deshacer",
+                    modifier = Modifier
+                        .clickable {
+                            tomada = false
+                            posposiciones = 0
+                        }
+                        .padding(6.dp),
+                    style = TextStyle(color = Gris, fontSize = 11.sp)
+                )
+            }
+
+            // 2) La pospuso al menos una vez
+            posposiciones > 0 -> {
+                Chip(texto = "⏰ Te aviso a las $horaAviso", fondo = Color(0xFF3A2C12), colorTexto = Color(0xFFF2C987))
+                if (posposiciones >= 3) {
+                    BasicText(
+                        "Si no confirmas, se avisará\na tu cuidador",
+                        style = TextStyle(color = RojoSosClaro, fontSize = 10.sp, textAlign = TextAlign.Center)
+                    )
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    BotonRelleno(texto = "✓ Tomada", alTocar = { tomada = true })
+                    BotonContorno(texto = "+10 min", alTocar = { posposiciones += 1 })
+                }
+            }
+
+            // 3) Todavía no ha respondido
+            else -> {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    BotonRelleno(texto = "✓ Tomada", alTocar = { tomada = true })
+                    BotonContorno(texto = "10 min", alTocar = { posposiciones += 1 })
+                }
             }
         }
     }
 }
 
-// ── Pantalla 5: SOS ─────────────────────────
+/** "20:00" + 10 minutos → "20:10" (si pasa de medianoche vuelve a empezar). */
+fun sumarMinutos(hora: String, minutos: Int): String {
+    val partes = hora.split(":")
+    val total = (partes[0].toInt() * 60 + partes[1].toInt() + minutos) % (24 * 60)
+    return "%02d:%02d".format(total / 60, total % 60)
+}
+// ── Pantalla 5: Alerta SOS ─────────────────────────
 @Composable
 fun PantallaSos() {
     val progreso = remember { Animatable(0f) }      // de 0 (vacío) a 1 (lleno)
